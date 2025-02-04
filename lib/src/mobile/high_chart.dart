@@ -1,231 +1,225 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+// import 'package:webview_flutter_android/webview_flutter_android.dart';
+// import 'package:webview_flutter_wkwebview/webview_flutter_wkwebview.dart';
+
 ///
-/// A Chart library for Flutter based on [High Charts (.JS)](https://www.highcharts.com/).
-///
-/// This library uses `WebView` to render High Charts with data and configuration provided by the user.
-/// It supports Android, iOS, Web, Windows, and MacOS platforms.
-/// For the Web platform, High Charts scripts need to be included in the `web/index.html` file.
+///A Chart library based on [High Charts (.JS)](https://www.highcharts.com/)
 ///
 class HighCharts extends StatefulWidget {
-  const HighCharts({
-    required this.data, // Chart data in JSON format
-    required this.size, // Size of the chart (height and width)
-    this.loader = const Center(
-      child: CircularProgressIndicator(),
-    ), // Loader widget while the chart loads
-    this.networkScripts = const [], // Network-based JS scripts for High Charts
-    this.localScripts = const [], // Local JS scripts for High Charts
-    this.scripts = const [], // Deprecated: Combined list of JS scripts
-    super.key,
-  });
+  const HighCharts(
+      {required this.data,
+      required this.size,
+      this.loader = const Center(child: CircularProgressIndicator()),
+      this.scripts = const [],
+      super.key});
 
-  /// A custom loader widget displayed until the chart is fully loaded.
-  /// Defaults to a `CircularProgressIndicator`. This setting has no effect on the Web platform.
+  ///Custom `loader` widget, until script is loaded
+  ///
+  ///Has no effect on Web
+  ///
+  ///Defaults to `CircularProgressIndicator`
   final Widget loader;
 
-  /// Chart data and configuration in JSON format.
+  ///Chart data
   ///
-  /// Example:
-  /// ```dart
-  /// String chartData = '''
-  /// {
-  ///   title: { text: 'Sample Chart' },
-  ///   xAxis: { categories: ['A', 'B', 'C'] },
-  ///   series: [{ data: [1, 2, 3] }]
-  /// }
-  /// ''';
-  /// ```
-  /// Reference: [High Charts API](https://api.highcharts.com/highcharts)
+  ///(use `jsonEncode` if the data is in `Map<String,dynamic>`)
+  ///
+  ///Reference: [High Charts API](https://api.highcharts.com/highcharts)
+  ///
+  ///```dart
+  ///String chart_data = '''{
+  ///      title: {
+  ///          text: 'Combination chart'
+  ///      },
+  ///      xAxis: {
+  ///          categories: ['Apples', 'Oranges', 'Pears', 'Bananas', 'Plums']
+  ///      },
+  ///      labels: {
+  ///          items: [{
+  ///              html: 'Total fruit consumption',
+  ///              style: {
+  ///                  left: '50px',
+  ///                  top: '18px',
+  ///                  color: (
+  ///                      Highcharts.defaultOptions.title.style &&
+  ///                      Highcharts.defaultOptions.title.style.color
+  ///                  ) || 'black'
+  ///              }
+  ///          }]
+  ///      },
+  ///
+  ///      ...
+  ///
+  ///    }''';
+  ///
+  ///```
+  ///
+  ///Reference: [High Charts API](https://api.highcharts.com/highcharts)
   final String data;
 
-  /// Dimensions of the chart widget. Both height and width are required.
+  ///Chart size
   ///
-  /// Example:
-  /// ```dart
-  /// Size chartSize = Size(400, 300);
-  /// ```
+  ///Height and width of the chart is required
+  ///
+  ///```dart
+  ///Size size = Size(400, 300);
+  ///```
   final Size size;
 
-  /// List of URLs pointing to High Charts JavaScript files.
+  ///Scripts to be loaded
   ///
-  /// Reference: [High Charts Scripts](https://code.highcharts.com/)
-  /// Example:
-  /// ```dart
-  /// List<String> scripts = [
-  ///   'https://code.highcharts.com/highcharts.js',
-  ///   'https://code.highcharts.com/modules/exporting.js'
+  ///Url's of the hightchart js scripts.
+  ///
+  ///Reference: [Full Scripts list](https://code.highcharts.com/)
+  ///
+  ///or use any CDN hosted script
+  ///
+  ///### For `android` and `ios` platforms, the scripts must be provided
+  ///
+  ///```dart
+  ///List<String> scripts = [
+  ///  'https://code.highcharts.com/highcharts.js',
+  ///  'https://code.highcharts.com/modules/exporting.js',
+  ///  'https://code.highcharts.com/modules/export-data.js'
   /// ];
   /// ```
-  final List<String> networkScripts;
-
-  /// List of locally stored High Charts JavaScript files to be loaded.
-  /// Example:
-  /// ```dart
-  /// List<String> localScripts = ['assets/highcharts.js'];
-  /// ```
-  final List<String> localScripts;
-
-  @Deprecated('Use this instead: `networkScripts` or `localScripts`')
+  ///
+  ///### For `web` platform, the scripts must be provided in `web/index.html`
+  ///
+  ///```html
+  ///<head>
+  ///   <script src="https://code.highcharts.com/highcharts.js"></script>
+  ///   <script src="https://code.highcharts.com/modules/exporting.js"></script>
+  ///   <script src="https://code.highcharts.com/modules/export-data.js"></script>
+  ///</head>
+  ///```
+  ///
   final List<String> scripts;
-
   @override
   HighChartsState createState() => HighChartsState();
 }
 
 class HighChartsState extends State<HighCharts> {
-  bool _isLoaded = false; // Tracks if the chart has been loaded
-  late WebViewController
-      _controller; // WebView controller for managing chart rendering
+  bool _isLoaded = false;
+
+  late WebViewController _controller;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize the WebView controller and configure it
     _controller = WebViewController();
 
     _controller
-      ..setJavaScriptMode(JavaScriptMode
-          .unrestricted) // Allow unrestricted JavaScript execution
-      ..enableZoom(false) // Disable zoom
-      ..loadHtmlString(
-          _htmlContent()) // Load the HTML content for rendering High Charts
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..enableZoom(false)
       ..setNavigationDelegate(
-        NavigationDelegate(
-          onWebResourceError: (error) {
-            debugPrint(error.toString()); // Print WebView errors for debugging
-          },
-          onPageFinished: (url) async {
-            // When the page finishes loading, inject local scripts if any
-            for (String src in widget.localScripts) {
-              String? scriptData = await getLocalAssetString(src);
-              if (scriptData == null) {
-                debugPrint(
-                    'High Charts Error -> $src not found'); // Log error if the script is missing
-                continue;
-              }
-              _controller.runJavaScript(
-                  scriptData); // Inject the script into the WebView
-            }
-            _loadData(); // Render the chart with the provided data
-          },
-          onNavigationRequest: (request) async {
-            // Handle external link navigation
-            if (await canLaunchUrlString(request.url)) {
-              try {
-                launchUrlString(request.url,
-                    mode: LaunchMode
-                        .externalApplication); // Open in external browser
-              } catch (e) {
-                debugPrint('High Charts Error -> $e'); // Log any errors
-              }
-              return NavigationDecision
-                  .prevent; // Prevent navigation within the WebView
-            }
-            return NavigationDecision.navigate; // Allow normal navigation
-          },
-        ),
-      );
+        NavigationDelegate(onWebResourceError: (WebResourceError error) {
+          debugPrint('Highcharts WebView Error: ${error.description}');
+        }, onPageFinished: (String url) {
+          _loadData();
+        }),
+      )
+      ..addJavaScriptChannel(
+        'FlutterHighchartsChannel',
+        onMessageReceived: (JavaScriptMessage message) {
+          debugPrint('Highcharts Error: ${message.message}');
+        },
+      )
+      ..setOnConsoleMessage(
+        (JavaScriptConsoleMessage message) {
+          debugPrint('Highcharts CONSOLE Error: ${message.message}');
+        },
+      )
+      ..loadHtmlString(_htmlContent());
 
     if (!Platform.isMacOS) {
-      _controller.setBackgroundColor(Colors
-          .transparent); // Set a transparent background for non-MacOS platforms
+      _controller.setBackgroundColor(Colors.transparent);
     }
   }
 
   @override
   void didUpdateWidget(covariant HighCharts oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    // Reload the WebView content if widget properties change
     if (oldWidget.data != widget.data ||
         oldWidget.size != widget.size ||
-        oldWidget.localScripts != widget.localScripts ||
-        oldWidget.networkScripts != widget.networkScripts) {
+        oldWidget.scripts != widget.scripts) {
       _controller.loadHtmlString(_htmlContent());
     }
+    super.didUpdateWidget(oldWidget);
   }
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: widget.size.height, // Set the height of the widget
-      width: widget.size.width, // Set the width of the widget
+      height: widget.size.height,
+      width: widget.size.width,
       child: Stack(
-        alignment: Alignment.center, // Center align child widgets
+        alignment: Alignment.center,
         fit: StackFit.expand,
         children: [
-          !_isLoaded
-              ? widget.loader
-              : const SizedBox
-                  .shrink(), // Show loader until the chart is loaded
-          WebViewWidget(
-            controller: _controller,
-          ), // Render the chart using WebView
+          !_isLoaded ? widget.loader : const SizedBox.shrink(),
+          WebViewWidget(controller: _controller)
         ],
       ),
     );
   }
 
-  // Generate the HTML content for rendering the chart
   String _htmlContent() {
     String html = '''
       <!DOCTYPE html>
       <html>
         <head>
           <meta charset="utf-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=0"/>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <script>
+            window.onerror = function(msg, url, line, col, error) {
+              FlutterHighchartsChannel.postMessage(
+                JSON.stringify({
+                  message: msg,
+                  url: url,
+                  line: line,
+                  column: col,
+                  error: error?.stack
+                })
+              );
+              return false;
+            };
+            
+            function senthilnasa(a) {
+              try {
+                eval(a);
+                return true;
+              } catch (error) {
+                FlutterHighchartsChannel.postMessage(error.toString());
+                return false;
+              }
+            }
+          </script>
         </head>
         <body>
           <div style="height:100%;width:100%;" id="highChartsDiv"></div>
-          <script>if (typeof senthilnasa !== 'function') function senthilnasa(a){ eval(a); return true; }</script>
     ''';
 
-    // Add network scripts to the HTML
-    for (String src in widget.networkScripts) {
-      html += '<script async="false" src="$src"></script>';
+    for (String src in widget.scripts) {
+      html += '<script src="$src"></script>';
     }
 
-    // Add deprecated scripts to the HTML
-    // ignore: deprecated_member_use_from_same_package
-    if (widget.scripts.isNotEmpty) {
-      debugPrint('High Charts Warning -> The "scripts" property is deprecated. '
-          'Please use "networkScripts" or "localScripts" instead.');
-      // ignore: deprecated_member_use_from_same_package
-      for (String src in widget.scripts) {
-        html += '<script async="false" src="$src"></script>';
-      }
-    }
     html += '</body></html>';
     return html;
   }
 
-  // Load local assets as strings
-  Future<String?> getLocalAssetString(String path) async {
-    try {
-      return await rootBundle.loadString(path);
-    } catch (_) {
-      return null; // Return null if the asset is not found
-    }
-  }
-
-  // Load the chart data into the WebView
   void _loadData() {
     if (mounted) {
       setState(() {
-        _isLoaded = true; // Mark the chart as loaded
+        _isLoaded = true;
       });
-
-      // Inject the chart data into the WebView
       _controller.runJavaScriptReturningResult(
-        "senthilnasa(`Highcharts.chart('highChartsDiv',${widget.data})`);",
-      );
+          "senthilnasa(`Highcharts.chart('highChartsDiv',${widget.data} )`);");
     }
   }
 }
